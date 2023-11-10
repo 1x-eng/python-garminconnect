@@ -13,7 +13,6 @@ import os
 import sys
 from getpass import getpass
 
-import readchar
 import requests
 from garth.exc import GarthHTTPError
 
@@ -102,11 +101,47 @@ def init_api(email, password):
 
     return garmin
 
-api = init_api(email, password)
-today_health_stats = api.get_stats(today.isoformat())
-display_json(
-    f"Today's health stats: (using api call = api.get_stats('{today.isoformat()}'))",
-    today_health_stats,
-)
+def post_health_stats_to_mem(api):
+    """Post today's health stats to mem.ai"""
+    try:
+        today_health_stats = api.get_stats(today.isoformat())
+        mem_api_key = os.getenv("MEM_API_KEY")
 
-# get today_health_stats sent to mem.ai as a mem.
+        if not mem_api_key:
+            print("No mem.ai API key set. Unable to post today's health stats to mem.ai")
+            return
+
+        mem_url = 'https://api.mem.ai/v0/mems'
+        mem_headers = {'Authorization': f'ApiAccessToken {mem_api_key}'}
+        mem_payload = {
+            'content': f"# {today.strftime('%d/%b/%Y')} | Health stats | Vitals\n\n"
+                    "#HealthStats #Garmin\n\n"
+                    "```\n"
+                    f"{json.dumps(today_health_stats, indent=4)}\n"
+                    "```\n"
+                    "\n"
+        }
+
+
+        mem_response = requests.post(mem_url, headers=mem_headers, json=mem_payload)
+
+        if mem_response.status_code == 200:
+            print("==================================================")
+            print("Posted today's health stats to mem.ai successfully")
+            print("==================================================\n")
+            
+            display_json(
+                f"Today's health stats: (using api call = api.get_stats('{today.isoformat()}'))",
+                today_health_stats,
+            )
+        else:
+            print(f"Failed to post today's health stats to mem.ai. Status code: {mem_response.status_code}, Response: {mem_response.text}")
+
+    except requests.RequestException as e:
+        print(f"An error occurred while posting to mem.ai: {e}")
+
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+api = init_api(email, password)
+post_health_stats_to_mem(api)
